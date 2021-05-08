@@ -1,3 +1,10 @@
+# Temporary segment files
+tmp
+# Output .mp4 directory
+out
+
+.DS_Store
+
 # Logs
 logs
 *.log
