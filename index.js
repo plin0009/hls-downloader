@@ -10,7 +10,7 @@ const __dirname = path.resolve();
 const download = async (url, filePath) => {
   return await new Promise((resolve, reject) => {
     const file = fs.createWriteStream(filePath);
-    (url.startsWith("https") ? https : http)
+    const request = (url.startsWith("https") ? https : http)
       .get(url)
       .on("response", (res) => {
         res.pipe(file);
@@ -23,6 +23,13 @@ const download = async (url, filePath) => {
           reject(err);
         });
       });
+    request.setTimeout(10000, () => {
+      request.socket.destroy();
+      request.destroy();
+      fs.unlink(filePath, () => {
+        reject("socket timeout");
+      });
+    });
   });
 };
 
@@ -60,8 +67,16 @@ const scanPlaylist = async (data) => {
       if (fs.existsSync(segmentFilepath)) {
         console.log(`file already exists: ${segmentFilename}`);
       } else {
-        console.log(`downloading ${segmentFilename}`);
-        await download(line, segmentFilepath);
+        while (1) {
+          try {
+            console.log(`downloading ${segmentFilename}`);
+            await download(line, segmentFilepath);
+            break;
+          } catch (e) {
+            console.error(e);
+            continue;
+          }
+        }
       }
       newPlaylistDataLines.push(segmentFilepath);
     } else {
@@ -78,44 +93,48 @@ const readline = rl.createInterface({
 
 readline.question("URL of master .m3u8: ", async (url) => {
   readline.question("Output file path: ", async (output) => {
-    try {
-      // find host and filename from url
-      const match = url.match(/(.*)\/(.*)$/);
-      const host = match[1] + "/";
-      const masterFilename = match[2];
-      const masterFilepath = await download(
-        url,
-        path.join(__dirname, `./tmp/${masterFilename}`)
-      );
-      // read file and queue downloads of inner files
-      const masterData = await readFile(masterFilepath);
-      // find first playlist file
-      const playlistFilename = scanMasterPlaylist(masterData);
-      // download it
-      const playlistFilepath = await download(
-        `${host}/${playlistFilename}`,
-        path.join(__dirname, `./tmp/${playlistFilename}`)
-      );
-      // read file
-      const playlistData = await readFile(playlistFilepath);
-      // download needed .ts files
-      const newPlaylistData = await scanPlaylist(playlistData);
-      const newPlaylistFilepath = await writeFile(
-        newPlaylistData,
-        `./tmp/local_${playlistFilename}`
-      );
-      console.log(`done writing to ${newPlaylistFilepath}`);
-      const command = `ffmpeg -protocol_whitelist file,http,https,tcp,tls,crypto -i ${newPlaylistFilepath} -c copy "${output}"`;
-      console.log(`now executing ${command}`);
-      await new Promise((resolve, reject) => {
-        exec(command, (error, stdout, stderr) => {
-          if (error) reject(stderr);
-          resolve(stdout);
+    while (1) {
+      try {
+        // find host and filename from url
+        const match = url.match(/(.*)\/(.*)$/);
+        const host = match[1] + "/";
+        const masterFilename = match[2];
+        const masterFilepath = await download(
+          url,
+          path.join(__dirname, `./tmp/${masterFilename}`)
+        );
+        // read file and queue downloads of inner files
+        const masterData = await readFile(masterFilepath);
+        // find first playlist file
+        const playlistFilename = scanMasterPlaylist(masterData);
+        // download it
+        const playlistFilepath = await download(
+          `${host}/${playlistFilename}`,
+          path.join(__dirname, `./tmp/${playlistFilename}`)
+        );
+        // read file
+        const playlistData = await readFile(playlistFilepath);
+        // download needed .ts files
+        const newPlaylistData = await scanPlaylist(playlistData);
+        const newPlaylistFilepath = await writeFile(
+          newPlaylistData,
+          `./tmp/local_${playlistFilename}`
+        );
+        console.log(`done writing to ${newPlaylistFilepath}`);
+        const command = `ffmpeg -protocol_whitelist file,http,https,tcp,tls,crypto -i ${newPlaylistFilepath} -c copy "${output}"`;
+        console.log(`now executing ${command}`);
+        await new Promise((resolve, reject) => {
+          exec(command, (error, stdout, stderr) => {
+            if (error) reject(stderr);
+            resolve(stdout);
+          });
         });
-      });
-      readline.close();
-    } catch (e) {
-      console.error(e);
+        readline.close();
+        break;
+      } catch (e) {
+        console.error(e);
+        continue;
+      }
     }
   });
 });
