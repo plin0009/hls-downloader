@@ -1,3 +1,5 @@
+# input json file
+input.json
 # Temporary segment files
 tmp
 # Output .mp4 directory
