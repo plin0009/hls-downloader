@@ -2,6 +2,8 @@ import http from "http";
 import https from "https";
 import fs from "fs";
 import path from "path";
+import rl from "readline";
+import { exec } from "child_process";
 
 const __dirname = path.resolve();
 
@@ -29,7 +31,8 @@ const readFile = async (filePath) => {
 };
 
 const writeFile = async (data, filePath) => {
-  return await fs.promises.writeFile(filePath, data);
+  await fs.promises.writeFile(filePath, data);
+  return filePath;
 };
 
 // returns first playlist file
@@ -50,14 +53,17 @@ const scanPlaylist = async (data) => {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.match(/\.ts$/)) {
-      // download the segment
+      // we need the segment
       const segmentFilename = line.match(/.*\/(.*)$/)[1];
-      console.log(`downloading ${segmentFilename}`);
-      const segmentPath = await download(
-        line,
-        path.join(__dirname, `./tmp/${segmentFilename}`)
-      );
-      newPlaylistDataLines.push(segmentPath);
+      // check if file exists
+      const segmentFilepath = path.join(__dirname, `./tmp/${segmentFilename}`);
+      if (fs.existsSync(segmentFilepath)) {
+        console.log(`file already exists: ${segmentFilename}`);
+      } else {
+        console.log(`downloading ${segmentFilename}`);
+        await download(line, segmentFilepath);
+      }
+      newPlaylistDataLines.push(segmentFilepath);
     } else {
       newPlaylistDataLines.push(line);
     }
@@ -65,34 +71,51 @@ const scanPlaylist = async (data) => {
   return newPlaylistDataLines.join("\n");
 };
 
-const url = "...";
+const readline = rl.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
-(async () => {
-  try {
-    // find host and filename from url
-    const match = url.match(/(.*)\/(.*)$/);
-    const host = match[1] + "/";
-    const masterFilename = match[2];
-    const masterFilepath = await download(
-      url,
-      path.join(__dirname, `./tmp/${masterFilename}`)
-    );
-    // read file and queue downloads of inner files
-    const masterData = await readFile(masterFilepath);
-    // find first playlist file
-    const playlistFilename = scanMasterPlaylist(masterData);
-    // download it
-    const playlistFilepath = await download(
-      `${host}/${playlistFilename}`,
-      path.join(__dirname, `./tmp/${playlistFilename}`)
-    );
-    // read file
-    const playlistData = await readFile(playlistFilepath);
-    // download needed .ts files
-    const newPlaylistData = await scanPlaylist(playlistData);
-    await writeFile(newPlaylistData, `./tmp/local_${playlistFilename}`);
-    console.log(`done writing`);
-  } catch (e) {
-    console.error(e);
-  }
-})();
+readline.question("URL of master .m3u8: ", async (url) => {
+  readline.question("Output file path: ", async (output) => {
+    try {
+      // find host and filename from url
+      const match = url.match(/(.*)\/(.*)$/);
+      const host = match[1] + "/";
+      const masterFilename = match[2];
+      const masterFilepath = await download(
+        url,
+        path.join(__dirname, `./tmp/${masterFilename}`)
+      );
+      // read file and queue downloads of inner files
+      const masterData = await readFile(masterFilepath);
+      // find first playlist file
+      const playlistFilename = scanMasterPlaylist(masterData);
+      // download it
+      const playlistFilepath = await download(
+        `${host}/${playlistFilename}`,
+        path.join(__dirname, `./tmp/${playlistFilename}`)
+      );
+      // read file
+      const playlistData = await readFile(playlistFilepath);
+      // download needed .ts files
+      const newPlaylistData = await scanPlaylist(playlistData);
+      const newPlaylistFilepath = await writeFile(
+        newPlaylistData,
+        `./tmp/local_${playlistFilename}`
+      );
+      console.log(`done writing to ${newPlaylistFilepath}`);
+      const command = `ffmpeg -protocol_whitelist file,http,https,tcp,tls,crypto -i ${newPlaylistFilepath} -c copy "${output}"`;
+      console.log(`now executing ${command}`);
+      await new Promise((resolve, reject) => {
+        exec(command, (error, stdout, stderr) => {
+          if (error) reject(stderr);
+          resolve(stdout);
+        });
+      });
+      readline.close();
+    } catch (e) {
+      console.error(e);
+    }
+  });
+});
