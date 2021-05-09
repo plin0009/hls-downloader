@@ -5,6 +5,8 @@ import path from "path";
 import { exec } from "child_process";
 
 const __dirname = path.resolve();
+const tmpDirectory = path.join(__dirname, "./tmp/");
+const outDirectory = path.join(__dirname, "./out/");
 
 const download = async (url, filePath) => {
   return await new Promise((resolve, reject) => {
@@ -85,72 +87,71 @@ const scanPlaylist = async (data) => {
   return newPlaylistDataLines.join("\n");
 };
 
-const tmpDirectory = path.join(__dirname, "./tmp/");
-const outDirectory = path.join(__dirname, "./out/");
+(async () => {
+  const { streams } = JSON.parse(fs.readFileSync("./input.json"));
+  for (let i = 0; i < streams.length; i++) {
+    const { url, output } = streams[i];
+    console.log(`processing ${output}`);
+    while (1) {
+      try {
+        // clean tmp directory
+        if (fs.existsSync(tmpDirectory)) {
+          console.log(`clean ./tmp directory`);
+          await fs.promises.rm(tmpDirectory, { recursive: true });
+        }
+        await fs.promises.mkdir(tmpDirectory);
 
-const { streams } = JSON.parse(fs.readFileSync("./input.json"));
-for (let i = 0; i < streams.length; i++) {
-  const { url, output } = streams[i];
-  console.log(`processing ${output}`);
-  while (1) {
-    try {
-      // clean tmp directory
-      if (fs.existsSync(tmpDirectory)) {
-        console.log(`clean ./tmp directory`);
-        await fs.promises.rm(tmpDirectory, { recursive: true });
-      }
-      await fs.promises.mkdir(tmpDirectory);
+        if (!fs.existsSync(outDirectory)) {
+          console.log(`create ./out directory`);
+          await fs.promises.mkdir(outDirectory);
+        }
 
-      if (!fs.existsSync(outDirectory)) {
-        console.log(`create ./out directory`);
-        await fs.promises.mkdir(outDirectory);
-      }
-
-      // find host and filename from url
-      const match = url.match(/(.*)\/(.*)$/);
-      const host = match[1] + "/";
-      const masterFilename = match[2];
-      const masterFilepath = await download(
-        url,
-        path.join(tmpDirectory, masterFilename)
-      );
-      // read file and queue downloads of inner files
-      const masterData = await readFile(masterFilepath);
-      // find first playlist file
-      const playlistFilename = scanMasterPlaylist(masterData);
-      // download it
-      const playlistFilepath = await download(
-        `${host}/${playlistFilename}`,
-        path.join(tmpDirectory, playlistFilename)
-      );
-      // read file
-      const playlistData = await readFile(playlistFilepath);
-      // download needed .ts files
-      const newPlaylistData = await scanPlaylist(playlistData);
-      const newPlaylistFilepath = await writeFile(
-        newPlaylistData,
-        `./tmp/local_${playlistFilename}`
-      );
-      console.log(`done writing to ${newPlaylistFilepath}`);
-      const command = `ffmpeg -protocol_whitelist file,http,https,tcp,tls,crypto -i ${newPlaylistFilepath} -c copy "${path.join(
-        outDirectory,
-        output
-      )}"`;
-      console.log(`now executing ${command}`);
-      const ffmpegOutput = await new Promise((resolve, reject) => {
-        exec(command, (error, stdout, stderr) => {
-          if (error) reject(stderr);
-          else resolve(stdout);
+        // find host and filename from url
+        const match = url.match(/(.*)\/(.*)$/);
+        const host = match[1] + "/";
+        const masterFilename = match[2];
+        const masterFilepath = await download(
+          url,
+          path.join(tmpDirectory, masterFilename)
+        );
+        // read file and queue downloads of inner files
+        const masterData = await readFile(masterFilepath);
+        // find first playlist file
+        const playlistFilename = scanMasterPlaylist(masterData);
+        // download it
+        const playlistFilepath = await download(
+          `${host}/${playlistFilename}`,
+          path.join(tmpDirectory, playlistFilename)
+        );
+        // read file
+        const playlistData = await readFile(playlistFilepath);
+        // download needed .ts files
+        const newPlaylistData = await scanPlaylist(playlistData);
+        const newPlaylistFilepath = await writeFile(
+          newPlaylistData,
+          `./tmp/local_${playlistFilename}`
+        );
+        console.log(`done writing to ${newPlaylistFilepath}`);
+        const command = `ffmpeg -protocol_whitelist file,http,https,tcp,tls,crypto -i ${newPlaylistFilepath} -c copy "${path.join(
+          outDirectory,
+          output
+        )}"`;
+        console.log(`now executing ${command}`);
+        const ffmpegOutput = await new Promise((resolve, reject) => {
+          exec(command, (error, stdout, stderr) => {
+            if (error) reject(stderr);
+            else resolve(stdout);
+          });
         });
-      });
-      await fs.promises.writeFile(
-        path.join(outDirectory, output + ".log"),
-        ffmpegOutput
-      );
-      break;
-    } catch (e) {
-      console.error(e);
-      continue;
+        await fs.promises.writeFile(
+          path.join(outDirectory, output + ".log"),
+          ffmpegOutput
+        );
+        break;
+      } catch (e) {
+        console.error(e);
+        continue;
+      }
     }
   }
-}
+})();
