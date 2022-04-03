@@ -94,12 +94,10 @@ const scanPlaylist = async (data) => {
     console.log(`processing ${output}`);
     while (1) {
       try {
-        // clean tmp directory
-        if (fs.existsSync(tmpDirectory)) {
-          console.log(`clean ./tmp directory`);
-          await fs.promises.rm(tmpDirectory, { recursive: true });
+        if (!fs.existsSync(tmpDirectory)) {
+          console.log(`create ./tmp directory`);
+          await fs.promises.mkdir(tmpDirectory);
         }
-        await fs.promises.mkdir(tmpDirectory);
 
         if (!fs.existsSync(outDirectory)) {
           console.log(`create ./out directory`);
@@ -137,16 +135,24 @@ const scanPlaylist = async (data) => {
           output
         )}"`;
         console.log(`now executing ${command}`);
-        const ffmpegOutput = await new Promise((resolve, reject) => {
+        await new Promise((resolve, reject) => {
           exec(command, (error, stdout, stderr) => {
-            if (error) reject(stderr);
-            else resolve(stdout);
+            const logFilepath = path.join(outDirectory, output + ".log");
+            if (error)
+              fs.writeFile(logFilepath, stderr, () => {
+                reject(error);
+              });
+            else
+              fs.writeFile(logFilepath, stdout, () => {
+                resolve();
+              });
           });
         });
-        await fs.promises.writeFile(
-          path.join(outDirectory, output + ".log"),
-          ffmpegOutput
-        );
+        // clean tmp directory
+        if (fs.existsSync(tmpDirectory)) {
+          console.log(`clean ./tmp directory`);
+          await fs.promises.rm(tmpDirectory, { recursive: true });
+        }
         break;
       } catch (e) {
         console.error(e);
