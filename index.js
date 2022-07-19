@@ -54,15 +54,20 @@ const scanMasterPlaylist = (data) => {
   }
 };
 
-// downloads all segments (.ts files) and returns new m3u8
-const scanPlaylist = async (data) => {
+/**
+ * downloads all segments (.ts files) and returns new m3u8
+ * @param data Playlist data from Host
+ * @param segmentHostUrl segmentHost url
+ * @returns {Promise<string>} Playlist file with local segment paths
+ */
+const scanPlaylist = async (data,segmentHostUrl) => {
   const newPlaylistDataLines = [];
   const lines = data.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.match(/\.ts$/)) {
       // we need the segment
-      const segmentFilename = line.match(/.*\/(.*)$/)[1];
+      const segmentFilename = line;
       // check if file exists
       const segmentFilepath = path.join(tmpDirectory, segmentFilename);
       if (fs.existsSync(segmentFilepath)) {
@@ -71,7 +76,7 @@ const scanPlaylist = async (data) => {
         while (1) {
           try {
             console.log(`downloading ${segmentFilename}`);
-            await download(line, segmentFilepath);
+            await download(`${segmentHostUrl}/${segmentFilename}`, segmentFilepath);
             break;
           } catch (e) {
             console.error(e);
@@ -115,16 +120,23 @@ const scanPlaylist = async (data) => {
         // read file and queue downloads of inner files
         const masterData = await readFile(masterFilepath);
         // find first playlist file
-        const playlistFilename = scanMasterPlaylist(masterData);
+        const playlistUrl = scanMasterPlaylist(masterData);
+
+        let playListFilenameData = playlistUrl.match(/(.*)\/(.*)$/);
+        // Extracts host url from playlsit file
+        let playlistHostUrl = playListFilenameData[1];
+        // Extracts playlist name from master file
+        const playlistFilename = playListFilenameData[2];
+
         // download it
         const playlistFilepath = await download(
-          `${host}/${playlistFilename}`,
+          `${playlistHostUrl}/${playlistUrl}`,
           path.join(tmpDirectory, playlistFilename)
         );
         // read file
         const playlistData = await readFile(playlistFilepath);
         // download needed .ts files
-        const newPlaylistData = await scanPlaylist(playlistData);
+        const newPlaylistData = await scanPlaylist(playlistData, playlistHostUrl);
         const newPlaylistFilepath = await writeFile(
           newPlaylistData,
           `./tmp/local_${playlistFilename}`
