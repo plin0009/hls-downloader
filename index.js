@@ -7,6 +7,7 @@ import { exec } from "child_process";
 const __dirname = path.resolve();
 const tmpDirectory = path.join(__dirname, "./tmp/");
 const outDirectory = path.join(__dirname, "./out/");
+const inputFilePath = path.join(__dirname, "input.json");
 
 const download = async (url, filePath) => {
   return await new Promise((resolve, reject) => {
@@ -106,8 +107,31 @@ const scanPlaylist = async (data, segmentHostUrl) => {
   return newPlaylistDataLines.join("\n");
 };
 
+async function mergeSegments(command, output) {
+  await new Promise((resolve, reject) => {
+    exec(command, (error, stdout, stderr) => {
+      const logFilepath = path.join(outDirectory, output + ".log");
+      if (error)
+        fs.writeFile(logFilepath, stderr, () => {
+          reject(error);
+        });
+      else
+        fs.writeFile(logFilepath, stdout, () => {
+          resolve();
+        });
+    });
+  });
+}
+
+function getInputFile() {
+  if (!fs.existsSync(inputFilePath)) {
+    throw new Error(`Input file not found at ${inputFilePath}`);
+  }
+  return JSON.parse(fs.readFileSync(inputFilePath));
+}
+
 (async () => {
-  const { streams } = JSON.parse(fs.readFileSync("./input.json"));
+  const { streams } = getInputFile();
   for (let i = 0; i < streams.length; i++) {
     const { url, output } = streams[i];
     console.log(`processing ${output}`);
@@ -164,19 +188,7 @@ const scanPlaylist = async (data, segmentHostUrl) => {
           output
         )}"`;
         console.log(`now executing ${command}`);
-        await new Promise((resolve, reject) => {
-          exec(command, (error, stdout, stderr) => {
-            const logFilepath = path.join(outDirectory, output + ".log");
-            if (error)
-              fs.writeFile(logFilepath, stderr, () => {
-                reject(error);
-              });
-            else
-              fs.writeFile(logFilepath, stdout, () => {
-                resolve();
-              });
-          });
-        });
+        await mergeSegments(command, output);
         // clean tmp directory
         if (fs.existsSync(tmpDirectory)) {
           console.log(`clean ./tmp directory`);
