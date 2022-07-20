@@ -60,9 +60,9 @@ const scanMasterPlaylist = (data) => {
  * @returns {{filename: string, hostUrl: string}}
  */
 const extractHostnameFilenameFromUrl = (url) => {
-  const splitUrl = url.match(/(.*)\/(.*)$/);
-  const hostUrl = splitUrl[1];
-  const filename = splitUrl[2];
+  const splitUrl = url.split("/");
+  const hostUrl = splitUrl.slice(0, splitUrl.length - 1).join("/");
+  const filename = splitUrl.pop();
   return { hostUrl, filename };
 };
 
