@@ -53,6 +53,18 @@ const scanMasterPlaylist = (data) => {
     }
   }
 };
+/**
+ * Extracts hostname url and filename from an url
+ * @param url to extract information
+ * @returns {{filename: string, hostUrl: string}}
+ */
+const extractHostnameFilenameFromUrl = (url) => {
+  const splitUrl = url.match(/(.*)\/(.*)$/);
+  const hostUrl = splitUrl[1];
+  const filename = splitUrl[2];
+  return {hostUrl, filename};
+}
+
 
 /**
  * downloads all segments (.ts files) and returns new m3u8
@@ -110,9 +122,9 @@ const scanPlaylist = async (data,segmentHostUrl) => {
         }
 
         // find host and filename from url
-        const match = url.match(/(.*)\/(.*)$/);
-        const host = match[1] + "/";
-        const masterFilename = match[2];
+        const masterPlaylistData = extractHostnameFilenameFromUrl(url);
+        const masterFilename = masterPlaylistData.filename;
+
         const masterFilepath = await download(
           url,
           path.join(tmpDirectory, masterFilename)
@@ -122,15 +134,15 @@ const scanPlaylist = async (data,segmentHostUrl) => {
         // find first playlist file
         const playlistUrl = scanMasterPlaylist(masterData);
 
-        let playListFilenameData = playlistUrl.match(/(.*)\/(.*)$/);
+        let playListFilenameData = extractHostnameFilenameFromUrl(playlistUrl);
         // Extracts host url from playlsit file
-        let playlistHostUrl = playListFilenameData[1];
+        let playlistHostUrl = playListFilenameData.hostUrl;
         // Extracts playlist name from master file
-        const playlistFilename = playListFilenameData[2];
+        const playlistFilename = playListFilenameData.filename;
 
         // download it
         const playlistFilepath = await download(
-          `${playlistHostUrl}/${playlistUrl}`,
+          playlistUrl,
           path.join(tmpDirectory, playlistFilename)
         );
         // read file
