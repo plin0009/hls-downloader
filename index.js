@@ -62,9 +62,8 @@ const extractHostnameFilenameFromUrl = (url) => {
   const splitUrl = url.match(/(.*)\/(.*)$/);
   const hostUrl = splitUrl[1];
   const filename = splitUrl[2];
-  return {hostUrl, filename};
-}
-
+  return { hostUrl, filename };
+};
 
 /**
  * downloads all segments (.ts files) and returns new m3u8
@@ -72,7 +71,7 @@ const extractHostnameFilenameFromUrl = (url) => {
  * @param segmentHostUrl segmentHost url
  * @returns {Promise<string>} Playlist file with local segment paths
  */
-const scanPlaylist = async (data,segmentHostUrl) => {
+const scanPlaylist = async (data, segmentHostUrl) => {
   const newPlaylistDataLines = [];
   const lines = data.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -88,7 +87,10 @@ const scanPlaylist = async (data,segmentHostUrl) => {
         while (1) {
           try {
             console.log(`downloading ${segmentFilename}`);
-            await download(`${segmentHostUrl}/${segmentFilename}`, segmentFilepath);
+            await download(
+              `${segmentHostUrl}/${segmentFilename}`,
+              segmentFilepath
+            );
             break;
           } catch (e) {
             console.error(e);
@@ -148,7 +150,10 @@ const scanPlaylist = async (data,segmentHostUrl) => {
         // read file
         const playlistData = await readFile(playlistFilepath);
         // download needed .ts files
-        const newPlaylistData = await scanPlaylist(playlistData, playlistHostUrl);
+        const newPlaylistData = await scanPlaylist(
+          playlistData,
+          playlistHostUrl
+        );
         const newPlaylistFilepath = await writeFile(
           newPlaylistData,
           `./tmp/local_${playlistFilename}`
