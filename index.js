@@ -122,11 +122,34 @@ async function mergeSegments(command, output) {
   });
 }
 
+function validateInputFile(json) {
+  // check if streams property exists
+  const streams = json.streams;
+  let isValide = !!streams;
+
+  // check properties of stream is valide
+  if (isValide) {
+    for (let i in streams) {
+      const stream = streams[i];
+      if (!isValide) break;
+      isValide = !!stream.url && !!stream.output;
+    }
+  }
+
+  return isValide;
+}
+
 function getInputFile() {
   if (!fs.existsSync(inputFilePath)) {
     throw new Error(`Input file not found at ${inputFilePath}`);
   }
-  return JSON.parse(fs.readFileSync(inputFilePath));
+  const json = JSON.parse(fs.readFileSync(inputFilePath));
+  if (!validateInputFile(json)) {
+    throw new Error(
+      `Input file doesn't contain all needed values or is invalide`
+    );
+  }
+  return json;
 }
 
 async function createWorkFolders() {
