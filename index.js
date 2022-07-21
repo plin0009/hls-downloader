@@ -187,22 +187,21 @@ async function collectSegments(stream) {
 
   let playListFilenameData = extractHostnameFilenameFromUrl(playlistUrl);
   // Extracts host url from playlsit file
-  let playlistHostUrl =
-    playListFilenameData.hostUrl !== ""
-      ? `${playListFilenameData.hostUrl}/${playListFilenameData.filename}`
-      : `${host}/${playlistUrl}`;
+  const playlistHost =
+    playListFilenameData.hostUrl !== "" ? playListFilenameData.hostUrl : host;
+  const playlistFilenameUrl = `${playlistHost}/${playListFilenameData.filename}`;
   // Extracts playlist name from master file
   const playlistFilename = playListFilenameData.filename;
 
   // download it
   const playlistFilepath = await download(
-    playlistHostUrl,
+    playlistFilenameUrl,
     path.join(tmpDirectory, playlistFilename)
   );
   // read file
   const playlistData = await readFile(playlistFilepath);
   // download needed .ts files
-  const newPlaylistData = await scanPlaylist(playlistData, playlistHostUrl);
+  const newPlaylistData = await scanPlaylist(playlistData, playlistHost);
   const newPlaylistFilepath = await writeFile(
     newPlaylistData,
     `./tmp/local_${playlistFilename}`
