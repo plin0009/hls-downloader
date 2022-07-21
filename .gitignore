@@ -4,6 +4,7 @@ input.json
 tmp
 # Output .mp4 directory
 out
+.idea
 
 .DS_Store
 
