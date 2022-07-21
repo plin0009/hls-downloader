@@ -57,7 +57,7 @@ const scanMasterPlaylist = (data) => {
 /**
  * Extracts hostname url and filename from an url
  * @param url to extract information
- * @returns {{filename: string, hostUrl: string}}
+ * @returns {{filename: string, hostUrl: string}} hostname can be an empty string if only url is a filename
  */
 const extractHostnameFilenameFromUrl = (url) => {
   const splitUrl = url.split("/");
@@ -69,10 +69,10 @@ const extractHostnameFilenameFromUrl = (url) => {
 /**
  * downloads all segments (.ts files) and returns new m3u8
  * @param data Playlist data from Host
- * @param segmentHostUrl segmentHost url
+ * @param playlistHostUrl URL which was given to download the playlist
  * @returns {Promise<string>} Playlist file with local segment paths
  */
-const scanPlaylist = async (data, segmentHostUrl) => {
+const scanPlaylist = async (data, playlistHostUrl) => {
   const newPlaylistDataLines = [];
   const lines = data.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -84,7 +84,7 @@ const scanPlaylist = async (data, segmentHostUrl) => {
       const segmentUrl =
         lineData.hostUrl !== ""
           ? `${lineData.hostUrl}/${segmentFilename}`
-          : `${segmentHostUrl}/${segmentFilename}`;
+          : `${playlistHostUrl}/${segmentFilename}`;
       // check if file exists
       const segmentFilepath = path.join(tmpDirectory, segmentFilename);
       if (fs.existsSync(segmentFilepath)) {
@@ -183,15 +183,16 @@ async function collectSegments(stream) {
   // read file and queue downloads of inner files
   const masterData = await readFile(masterFilepath);
   // find first playlist file
-  const playlistUrl = scanMasterPlaylist(masterData);
+  const playlistUrlFromMasterfile = scanMasterPlaylist(masterData);
 
-  let playListFilenameData = extractHostnameFilenameFromUrl(playlistUrl);
-  // Extracts host url from playlsit file
-  const playlistHost =
+  const playListFilenameData = extractHostnameFilenameFromUrl(
+    playlistUrlFromMasterfile
+  );
+  // Extracts host url from playlist file
+  const playlistHostUrl =
     playListFilenameData.hostUrl !== "" ? playListFilenameData.hostUrl : host;
-  const playlistFilenameUrl = `${playlistHost}/${playListFilenameData.filename}`;
-  // Extracts playlist name from master file
   const playlistFilename = playListFilenameData.filename;
+  const playlistFilenameUrl = `${playlistHostUrl}/${playlistFilename}`;
 
   // download it
   const playlistFilepath = await download(
@@ -201,7 +202,7 @@ async function collectSegments(stream) {
   // read file
   const playlistData = await readFile(playlistFilepath);
   // download needed .ts files
-  const newPlaylistData = await scanPlaylist(playlistData, playlistHost);
+  const newPlaylistData = await scanPlaylist(playlistData, playlistHostUrl);
   const newPlaylistFilepath = await writeFile(
     newPlaylistData,
     `./tmp/local_${playlistFilename}`
